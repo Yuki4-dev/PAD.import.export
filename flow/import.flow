@@ -1,14 +1,25 @@
 SET IsDebug TO 1
 SET DesignWidth TO 1920
 SET DesignHeight TO 1080
-SET DesignDPI TO 100
-Scripting.RunPowershellScript.RunPowershellScript Script: $'''# PowerShellでDPIと解像度を取得
+SET DesignDPI TO 1
+Scripting.RunPowershellScript.RunPowershellScript Script: $'''
+Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
-$bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-$workArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-$dpiRatio = $bounds.Width / $workArea.Width
-$dpiPercent = [Math]::Round($dpiRatio * 100)
-Write-Output \"$($bounds.Width),$($bounds.Height),$dpiPercent\"
+
+
+$screen = [System.Windows.Forms.Screen]::PrimaryScreen
+$width  = $screen.Bounds.Width
+$height = $screen.Bounds.Height
+
+
+$graphics = [System.Drawing.Graphics]::FromImage((New-Object System.Drawing.Bitmap 1,1))
+$dpiX = $graphics.DpiX
+$dpiY = $graphics.DpiY
+$scaleFactorX = $dpiX / 96
+$scaleFactorY = $dpiY / 96
+
+
+Write-Output \"$width,$height,$scaleFactorX,$scaleFactorY\"
 ''' ScriptOutput=> PowershellOutput ScriptError=> PowershellError
 IF IsNotEmpty(PowershellError) THEN
     Display.ShowMessageDialog.ShowMessage Title: $'''ERROR''' Message: PowershellError Icon: Display.Icon.None Buttons: Display.Buttons.OK DefaultButton: Display.DefaultButton.Button1 IsTopMost: False
@@ -17,8 +28,8 @@ Text.SplitText.SplitWithDelimiter Text: PowershellOutput CustomDelimiter: $''','
 Text.ToNumber Text: PowershellOutputList[0] Number=> DisplayWidth
 Text.ToNumber Text: PowershellOutputList[1] Number=> DisplayHeight
 Text.ToNumber Text: PowershellOutputList[2] Number=> DPI
-SET ScaleX TO (DisplayWidth / DesignWidth) * (DPI / DesignDPI)
-SET ScaleY TO (DisplayHeight / DesignHeight) * (DPI / DesignDPI)
+SET ScaleX TO (DesignWidth / DisplayWidth) * (DPI / DesignDPI)
+SET ScaleY TO (DesignHeight / DisplayHeight) * (DPI / DesignDPI)
 IF IsDebug = 1 THEN
     Folder.GetFiles Folder: $'''C:\\Users\\sanak\\Desktop\\pad\\20250724-09-24-53 - Excel2Tabie''' FileFilter: $'''*''' IncludeSubfolders: False FailOnAccessDenied: True SortBy1: Folder.SortBy.NoSort SortDescending1: False SortBy2: Folder.SortBy.NoSort SortDescending2: False SortBy3: Folder.SortBy.NoSort SortDescending3: False Files=> Files
 ELSE
@@ -27,9 +38,9 @@ ELSE
 END
 Scripting.RunJavascript.RunJavascript JavascriptCode: $'''var shell = new ActiveXObject(\"WScript.Shell\");
 if (!shell.AppActivate(\"Power Automate\")) {
-    WScript.Echo(\"指定されたウィンドウが見つかりません: \" + title);
+    WScript.Echo(\"指定されたウィンドウが見つかりません: Power Automate\");
 }
-'''
+''' ScriptError=> ScriptError
 Variables.CreateNewList List=> SubFlowList
 LOOP FOREACH File IN Files
     IF File['Name'] = $'''metadata''' THEN
@@ -45,8 +56,7 @@ LOOP FOREACH File IN Files
 END
 UIAutomation.GetWindow.GetForegroundWindow WindowTitle=> WindowTitle WindowInstance=> AutomationWindow
 UIAutomation.SetWindowState.SetStateByInstanceOrHandle WindowInstance: AutomationWindow State: UIAutomation.WindowState.Maximized
-MouseAndKeyboard.SendMouseClick.ClickAt ClickType: MouseAndKeyboard.MouseClickType.LeftClick MillisecondsDelay: 0 X: 40 * ScaleX Y: 170 * ScaleY RelativeTo: MouseAndKeyboard.PositionRelativeTo.ActiveWindow MovementStyle: MouseAndKeyboard.MovementStyle.Instant
-MouseAndKeyboard.SendMouseClick.ClickAt ClickType: MouseAndKeyboard.MouseClickType.LeftClick MillisecondsDelay: 0 X: 50 * ScaleX Y: 60 * ScaleY RelativeTo: MouseAndKeyboard.PositionRelativeTo.ActiveWindow MovementStyle: MouseAndKeyboard.MovementStyle.Instant
+MouseAndKeyboard.SendKeys.FocusAndSendKeys TextToSend: $'''{Control}(n)''' DelayBetweenKeystrokes: 200 SendTextAsHardwareKeys: True
 WAIT 1
 MouseAndKeyboard.SendKeys.FocusAndSendKeys TextToSend: JsonAsMetadate['name'] DelayBetweenKeystrokes: 10 SendTextAsHardwareKeys: False
 MouseAndKeyboard.SendKeys.FocusAndSendKeys TextToSend: $'''{Tab}{Tab}{Tab}{Enter}''' DelayBetweenKeystrokes: 200 SendTextAsHardwareKeys: True
@@ -60,7 +70,9 @@ UIAutomation.SetWindowState.SetStateByInstanceOrHandle WindowInstance: Automatio
 WAIT 1
 MouseAndKeyboard.SendKeys.FocusAndSendKeys TextToSend: $'''{Alt}(){Right}{Right}{Right}{Right}{Enter}{Down}{Down}{Down}{Enter}''' DelayBetweenKeystrokes: 200 SendTextAsHardwareKeys: True
 WAIT 1
-MouseAndKeyboard.SendMouseClick.ClickAt ClickType: MouseAndKeyboard.MouseClickType.LeftClick MillisecondsDelay: 0 X: 600 * ScaleX Y: 550 * ScaleY RelativeTo: MouseAndKeyboard.PositionRelativeTo.ActiveWindow MovementStyle: MouseAndKeyboard.MovementStyle.Instant
+Variables.TruncateNumber.GetIntegerPart Number: 500 * ScaleX Result=> X
+Variables.TruncateNumber.GetIntegerPart Number: 350 * ScaleY Result=> Y
+MouseAndKeyboard.SendMouseClick.ClickAt ClickType: MouseAndKeyboard.MouseClickType.LeftClick MillisecondsDelay: 0 X: X Y: Y RelativeTo: MouseAndKeyboard.PositionRelativeTo.ActiveWindow MovementStyle: MouseAndKeyboard.MovementStyle.Instant
 # ↓MainFlow
 Clipboard.SetText Text: MainFlow
 MouseAndKeyboard.SendKeys.FocusAndSendKeys TextToSend: $'''{Control}({V})''' DelayBetweenKeystrokes: 10 SendTextAsHardwareKeys: False
@@ -73,7 +85,9 @@ LOOP FOREACH SubFlowItem IN SubFlowList
     MouseAndKeyboard.SendKeys.FocusAndSendKeys TextToSend: $'''{Tab}{Enter}''' DelayBetweenKeystrokes: 200 SendTextAsHardwareKeys: True
     WAIT 1
     Clipboard.SetText Text: SubFlowItem['Flow']
-    MouseAndKeyboard.SendMouseClick.ClickAt ClickType: MouseAndKeyboard.MouseClickType.LeftClick MillisecondsDelay: 0 X: 600 * ScaleX Y: 550 * ScaleY RelativeTo: MouseAndKeyboard.PositionRelativeTo.ActiveWindow MovementStyle: MouseAndKeyboard.MovementStyle.Instant
+    Variables.TruncateNumber.GetIntegerPart Number: 500 * ScaleX Result=> X
+    Variables.TruncateNumber.GetIntegerPart Number: 350 * ScaleY Result=> Y
+    MouseAndKeyboard.SendMouseClick.ClickAt ClickType: MouseAndKeyboard.MouseClickType.LeftClick MillisecondsDelay: 0 X: X Y: Y RelativeTo: MouseAndKeyboard.PositionRelativeTo.ActiveWindow MovementStyle: MouseAndKeyboard.MovementStyle.Instant
     MouseAndKeyboard.SendKeys.FocusAndSendKeys TextToSend: $'''{Control}({V})''' DelayBetweenKeystrokes: 10 SendTextAsHardwareKeys: False
     WAIT 1
 END
